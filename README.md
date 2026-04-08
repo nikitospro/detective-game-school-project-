@@ -393,3 +393,127 @@ If you want to extend it, the easiest next steps are:
 - improve scoring rules in `game_logic.py`;
 - refine prompts in `ollama_client.py`;
 - redesign the interface in `templates/` and `static/style.css`.
+
+### Q/A
+
+1. What type of data storage did I use?
+Not only JSON.
+
+I used two storage layers:
+
+Static case data is stored directly in Python code as dataclasses in cases.py.
+Runtime player state is stored as JSON files in data/sessions/ through JsonSessionStore in utils.py.
+2. So is there a database?
+No. There is no SQLite, Postgres, or external DB in this version.
+
+That was intentional:
+
+the project is easier to run in class;
+there is no setup friction;
+the app stays small and understandable.
+3. What exactly is stored in JSON?
+The JSON session files store the investigation progress:
+
+selected case;
+difficulty;
+chosen model;
+notes;
+viewed clues;
+clue analysis;
+chat history;
+question counts;
+final result.
+4. What is stored in the Flask session itself?
+Only a session ID.
+
+The actual investigation data is not stored in the browser cookie. The cookie just keeps the ID, and the real state is loaded from the JSON file on the server side in app.py.
+
+5. Why did I store the cases in Python instead of JSON too?
+Because the cases are structured, fixed, and tightly connected to the game logic.
+
+Using dataclasses in cases.py makes the case definitions:
+
+easier to validate;
+easier to read in code;
+safer for deterministic logic;
+simpler to extend with methods and typing.
+6. Does the AI store anything by itself?
+No.
+
+The AI does not own the game state and does not define truth. It only generates text based on the structured data already defined in code.
+
+7. Does Ollama need the internet here?
+No, not for normal gameplay.
+
+The app uses the local Python ollama package in ollama_client.py, so generation happens through the local Ollama installation and local model.
+
+8. Does the LLM decide who the killer is?
+No.
+
+The real logic lives in:
+
+cases.py for the truth of the case;
+game_logic.py for deductions, contradiction checks, suspicion, and scoring.
+That is the core architectural idea of the project.
+
+9. What happens if Ollama fails?
+The application falls back to deterministic backup responses.
+
+That logic is inside ollama_client.py, so the game still works even if:
+
+Ollama is not running;
+the model is missing;
+the model returns unusable output.
+10. How does the app know what the player is doing?
+The flow is:
+
+Flask route receives an action in app.py;
+state is loaded from JSON;
+game_logic.py updates it;
+the updated state is saved back to JSON;
+the page is re-rendered.
+11. Is any data stored only in memory?
+Yes, but only temporary data for the current request.
+
+For example:
+
+rendered view models;
+intermediate AI responses before saving;
+computed UI values like progress counters.
+Persistent progress is saved to JSON.
+
+12. Why Flask and not Django or FastAPI?
+Because Flask is a very good fit for a classroom mini-application:
+
+simple to understand;
+easy to demo;
+fast to build;
+good for server-rendered pages with forms and session-based flow.
+13. How is the UI built?
+The UI is server-rendered with:
+
+Flask;
+Jinja templates in templates/index.html;
+CSS in static/style.css.
+14. How is the final accusation checked?
+It is checked deterministically in game_logic.py.
+
+The system compares:
+
+selected suspect;
+motive text;
+evidence text;
+matched keywords from the true solution;
+missed critical clues;
+contradictions found during investigation.
+15. If I wanted to improve storage later, what would be the next step?
+The most natural upgrade would be SQLite.
+
+That would let you store:
+
+cases;
+players;
+saved investigations;
+scores;
+history of finished games.
+
