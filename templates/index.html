@@ -3,6 +3,7 @@
 {% block title %}AI Detective Lab{% endblock %}
 
 {% block content %}
+{% set selected_theme = case_file.generator_theme if case_file.generator_theme else generation_themes[0].key %}
 <div class="page-shell">
     <header class="hero">
         <div class="hero__text">
@@ -16,8 +17,13 @@
 
         <div class="hero__meta">
             <span class="meta-chip">Дело: {{ case_file.title }}</span>
+            <span class="meta-chip meta-chip--{{ 'generated' if is_generated_case else 'local' }}">Источник: {{ case_file.source_label }}</span>
             <span class="meta-chip">Сложность: {{ difficulty.label }}</span>
             <span class="meta-chip">Модель: {{ state.model_name }}</span>
+            {% if is_generated_case %}
+                <span class="meta-chip">Тема: {{ case_file.generator_theme_label }}</span>
+                <span class="meta-chip">Seed: {{ case_file.generator_seed }}</span>
+            {% endif %}
             <span class="meta-chip meta-chip--{{ last_llm.source }}">{{ "Ollama" if last_llm.source == "ollama" else "Резервный режим" }}</span>
         </div>
     </header>
@@ -41,7 +47,7 @@
     <section class="panel panel--controls">
         <div class="panel__header">
             <h2>Управление делом</h2>
-            <p>Выберите кейс, уровень помощи и модель Ollama.</p>
+            <p>Выберите готовый кейс или соберите новое процедурное расследование по теме и seed.</p>
         </div>
         <form action="{{ url_for('select_case') }}" method="post" class="controls-form">
             <label>
@@ -49,7 +55,7 @@
                 <select name="case_id">
                     {% for item in case_options %}
                         <option value="{{ item.case_id }}" {% if item.case_id == case_file.case_id %}selected{% endif %}>
-                            {{ item.title }} · {{ item.difficulty_label }}
+                            {{ item.title }} · {{ item.difficulty_label }} · {{ item.source_label }}
                         </option>
                     {% endfor %}
                 </select>
@@ -79,6 +85,61 @@
         <form action="{{ url_for('reset_case') }}" method="post" class="inline-form">
             <button class="button button--ghost" type="submit">Начать дело заново</button>
         </form>
+
+        <div class="generator-block">
+            <div class="panel__header panel__header--compact">
+                <h3>Генератор нового дела</h3>
+                <p>Одна и та же тема с одинаковым seed всегда создаёт один и тот же набор подозреваемых, улик и развязку.</p>
+            </div>
+
+            <form action="{{ url_for('generate_case') }}" method="post" class="controls-form controls-form--generator">
+                <label>
+                    <span>Тема генерации</span>
+                    <select name="theme_key">
+                        {% for theme in generation_themes %}
+                            <option value="{{ theme.key }}" {% if theme.key == selected_theme %}selected{% endif %}>
+                                {{ theme.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label>
+                    <span>Seed</span>
+                    <input
+                        type="text"
+                        name="case_seed"
+                        value="{{ case_file.generator_seed if is_generated_case else '' }}"
+                        placeholder="Оставьте пустым для случайного"
+                    >
+                </label>
+
+                <label>
+                    <span>Уровень сложности</span>
+                    <select name="difficulty">
+                        {% for option in difficulty_options %}
+                            <option value="{{ option.key }}" {% if option.key == difficulty.key %}selected{% endif %}>
+                                {{ option.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label>
+                    <span>Модель Ollama</span>
+                    <input type="text" name="model_name" value="{{ state.model_name }}" placeholder="llama3.1:8b">
+                </label>
+
+                <div class="controls-form__actions">
+                    <button class="button button--primary" type="submit">Сгенерировать дело</button>
+                </div>
+            </form>
+
+            <p class="muted control-note">
+                Практический режим для занятий: используйте встроенные дела для стабильного демо, а генератор — чтобы быстро получать новые кейсы
+                с разными персонажами и потом воспроизводить их по тому же seed.
+            </p>
+        </div>
     </section>
 
     <div class="board-grid">
@@ -92,6 +153,28 @@
                 <h3>Вводная</h3>
                 <p class="prose">{{ case_file.introduction }}</p>
                 <p class="prose prose--accent">{{ state.intro_text }}</p>
+            </div>
+
+            <div class="overview-block">
+                <h3>Паспорт дела</h3>
+                <div class="case-facts">
+                    <p><strong>Источник:</strong> {{ case_file.source_label }}</p>
+                    <p><strong>Формат:</strong> {{ case_file.difficulty_label }}</p>
+                    {% if is_generated_case %}
+                        <p><strong>Тема:</strong> {{ case_file.generator_theme_label }}</p>
+                        <p><strong>Seed:</strong> {{ case_file.generator_seed }}</p>
+                    {% endif %}
+                </div>
+                {% if is_generated_case %}
+                    <p class="muted">
+                        Это дело собрано детерминированно: персонажи, их мотивы, улики и решение создаются кодом,
+                        а LLM только оформляет допросы, атмосферу и объяснения.
+                    </p>
+                {% else %}
+                    <p class="muted">
+                        Авторское локальное дело удобно для первой демонстрации: оно полностью предсказуемо и хорошо подходит для разбора логики.
+                    </p>
+                {% endif %}
             </div>
 
             <div class="overview-block">

@@ -144,6 +144,16 @@ textarea {
     color: var(--ok);
 }
 
+.meta-chip--generated {
+    background: rgba(99, 71, 157, 0.1);
+    color: #513983;
+}
+
+.meta-chip--local {
+    background: rgba(179, 138, 66, 0.14);
+    color: #7b5a1d;
+}
+
 .flash-stack {
     display: grid;
     gap: 10px;
@@ -216,6 +226,21 @@ textarea {
 
 .controls-form__actions {
     display: flex;
+}
+
+.generator-block {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.controls-form--generator {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.control-note {
+    margin: 12px 0 0;
+    line-height: 1.55;
 }
 
 label {
@@ -370,6 +395,17 @@ textarea:focus {
     font-size: 0.82rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+}
+
+.case-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+    margin-bottom: 12px;
+}
+
+.case-facts p {
+    margin: 0;
 }
 
 .summary-box,
@@ -626,12 +662,20 @@ textarea:focus {
     .controls-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .controls-form--generator {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 900px) {
     .clue-layout,
     .result-grid,
     .progress-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .case-facts {
         grid-template-columns: 1fr;
     }
 }
@@ -649,6 +693,10 @@ textarea:focus {
     }
 
     .controls-form {
+        grid-template-columns: 1fr;
+    }
+
+    .controls-form--generator {
         grid-template-columns: 1fr;
     }
 

@@ -14,6 +14,8 @@ That makes the project a good classroom demo:
 ## What this project can do
 
 - let the player choose a case;
+- include several built-in local cases for stable demos;
+- generate new deterministic cases from a theme and seed;
 - show suspects and basic case information;
 - run suspect interrogations in chat format;
 - analyze clues with AI-generated explanations;
@@ -77,6 +79,7 @@ In other words:
 Important responsibilities:
 
 - selecting a case;
+- generating a new procedural case from the interface;
 - selecting a suspect or clue;
 - sending interrogation questions;
 - saving notes;
@@ -97,6 +100,11 @@ It defines data classes such as:
 
 It also stores the actual cases used in the game.
 
+There are two layers here:
+
+- hand-crafted local cases that are great for reliable demos;
+- procedural cases built from fixed templates, a theme, and a numeric seed.
+
 That means if you want to create a new story, this is the main place where you would add:
 
 - a new victim;
@@ -115,6 +123,7 @@ It is responsible for:
 
 - creating a new investigation state;
 - switching cases;
+- resolving generated cases from `theme + seed`;
 - tracking which suspect is active;
 - saving what clues the player has viewed;
 - unlocking contradictions;
@@ -309,13 +318,14 @@ http://127.0.0.1:5000
 ## How to play
 
 1. Choose a case.
-2. Pick a difficulty level.
-3. Open suspects and question them.
-4. Study clues and compare them with testimonies.
-5. Write your own notes.
-6. Look for contradictions.
-7. Make a final accusation.
-8. Read the final evaluation and report.
+2. Or generate a new case by choosing a theme and optional seed.
+3. Pick a difficulty level.
+4. Open suspects and question them.
+5. Study clues and compare them with testimonies.
+6. Write your own notes.
+7. Look for contradictions.
+8. Make a final accusation.
+9. Read the final evaluation and report.
 
 ## Difficulty levels
 
@@ -377,11 +387,12 @@ If those files are removed, the game starts from the beginning again.
 
 If you want to show this project in class, a nice flow is:
 
-1. open the case and explain the story;
-2. question one suspect;
-3. open one clue and show the AI explanation;
-4. point out that the truth still comes from the predefined case logic;
-5. make a final accusation and compare the result with the real solution.
+1. open one built-in case and explain the story;
+2. generate a second case live from a theme and seed;
+3. question one suspect;
+4. open one clue and show the AI explanation;
+5. point out that the truth still comes from deterministic case logic, not the model;
+6. make a final accusation and compare the result with the real solution.
 
 ## Final note
 
@@ -390,6 +401,7 @@ This project is intentionally small enough to understand, but structured enough 
 If you want to extend it, the easiest next steps are:
 
 - add more cases in `cases.py`;
+- add more procedural themes, role pools, and clue templates in `cases.py`;
 - improve scoring rules in `game_logic.py`;
 - refine prompts in `ollama_client.py`;
 - redesign the interface in `templates/` and `static/style.css`.

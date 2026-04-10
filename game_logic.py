@@ -5,7 +5,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from cases import CaseFile, Clue, Contradiction, Suspect, get_case_map, get_default_case_id
+from cases import (
+    CaseFile,
+    Clue,
+    Contradiction,
+    Suspect,
+    build_generated_case,
+    get_case_map,
+    get_default_case_id,
+    get_generation_themes,
+    make_generated_case_id,
+    parse_generated_case_id,
+)
 from ollama_client import OllamaClient
 from utils import (
     clamp,
@@ -15,6 +26,7 @@ from utils import (
     normalize_text,
     reasoning_quality,
     safe_text,
+    stable_seed,
     suspicion_label,
 )
 
@@ -66,9 +78,15 @@ class GameEngine:
         self.llm_client = llm_client or OllamaClient()
         self.case_map = case_map or get_case_map()
         self.default_case_id = get_default_case_id()
+        self.generation_themes = {theme.key: theme for theme in get_generation_themes()}
+        self.generated_case_cache: dict[str, CaseFile] = {}
 
     def ensure_state(self, state: dict[str, Any] | None) -> dict[str, Any]:
-        if not state or state.get("case_id") not in self.case_map:
+        if not state:
+            return self.new_state()
+
+        case_file = self._resolve_case(state.get("case_id"))
+        if case_file is None:
             return self.new_state()
 
         state.setdefault("difficulty", "detective")
@@ -80,7 +98,7 @@ class GameEngine:
         state.setdefault("result", None)
         state.setdefault("last_llm", {"source": "system", "error": None})
 
-        case_file = self.get_case(state["case_id"])
+        state["case_id"] = case_file.case_id
         state.setdefault("active_suspect_id", case_file.suspects[0].suspect_id)
         state.setdefault("active_clue_id", case_file.clues[0].clue_id)
         state.setdefault("intro_text", case_file.introduction)
@@ -199,7 +217,50 @@ class GameEngine:
         return updated
 
     def get_case(self, case_id: str) -> CaseFile:
-        return self.case_map.get(case_id, self.case_map[self.default_case_id])
+        return self._resolve_case(case_id) or self.case_map[self.default_case_id]
+
+    def start_generated_case(
+        self,
+        state: dict[str, Any],
+        *,
+        theme_key: str,
+        seed_text: str,
+        difficulty: str | None = None,
+        model_name: str | None = None,
+    ) -> tuple[dict[str, Any], str | None]:
+        cleaned_theme = safe_text(theme_key)
+        if cleaned_theme not in self.generation_themes:
+            return deepcopy(self.ensure_state(state)), "Выберите тему для процедурного дела."
+
+        if safe_text(seed_text):
+            try:
+                seed = abs(int(seed_text))
+            except ValueError:
+                return deepcopy(self.ensure_state(state)), "Seed должен быть целым числом."
+        else:
+            seed = stable_seed(
+                cleaned_theme,
+                datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+            )
+
+        if seed == 0:
+            seed = 1
+
+        return (
+            self.new_state(
+                case_id=make_generated_case_id(cleaned_theme, seed),
+                difficulty=difficulty or state.get("difficulty", "detective"),
+                model_name=model_name or state.get("model_name"),
+            ),
+            None,
+        )
+
+    def get_case_options(self, state: dict[str, Any]) -> list[CaseFile]:
+        options = list(self.case_map.values())
+        current_case = self._resolve_case(state.get("case_id"))
+        if current_case and current_case.case_id not in self.case_map:
+            options.append(current_case)
+        return options
 
     def get_difficulty(self, state: dict[str, Any]) -> DifficultyProfile:
         return DIFFICULTIES.get(state.get("difficulty", "detective"), DIFFICULTIES["detective"])
@@ -514,10 +575,12 @@ class GameEngine:
 
         return {
             "case_file": case_file,
-            "case_options": list(self.case_map.values()),
+            "case_options": self.get_case_options(current_state),
+            "generation_themes": list(self.generation_themes.values()),
             "difficulty": difficulty,
             "difficulty_options": list(DIFFICULTIES.values()),
             "state": current_state,
+            "is_generated_case": case_file.origin == "generated",
             "active_suspect": active_suspect,
             "active_history": current_state["chat_history"][active_suspect.suspect_id],
             "active_clue": active_clue,
@@ -540,6 +603,23 @@ class GameEngine:
                 "available_contradictions": len(contradictions),
             },
         }
+
+    def _resolve_case(self, case_id: str | None) -> CaseFile | None:
+        cleaned_case_id = safe_text(case_id)
+        if not cleaned_case_id:
+            return None
+        if cleaned_case_id in self.case_map:
+            return self.case_map[cleaned_case_id]
+
+        parsed = parse_generated_case_id(cleaned_case_id)
+        if parsed is None:
+            return None
+
+        theme_key, seed = parsed
+        generated_case_id = make_generated_case_id(theme_key, seed)
+        if generated_case_id not in self.generated_case_cache:
+            self.generated_case_cache[generated_case_id] = build_generated_case(theme_key, seed)
+        return self.generated_case_cache[generated_case_id]
 
     @staticmethod
     def _opening_line(suspect: Suspect) -> str:

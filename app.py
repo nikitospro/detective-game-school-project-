@@ -65,6 +65,29 @@ def select_case() -> str:
     return redirect(url_for("index"))
 
 
+@app.route("/case/generate", methods=["POST"])
+def generate_case() -> str:
+    session_id, state = load_state()
+    theme_key = safe_text(request.form.get("theme_key"))
+    seed_text = request.form.get("case_seed", "")
+    difficulty = safe_text(request.form.get("difficulty"), state.get("difficulty", "detective"))
+    model_name = safe_text(request.form.get("model_name"), state.get("model_name"))
+
+    updated_state, error = ENGINE.start_generated_case(
+        state,
+        theme_key=theme_key,
+        seed_text=seed_text,
+        difficulty=difficulty,
+        model_name=model_name,
+    )
+    save_state(session_id, updated_state)
+    if error:
+        flash(error, "error")
+    else:
+        flash("Процедурное дело сгенерировано. Можно начинать новое расследование.", "success")
+    return redirect(url_for("index"))
+
+
 @app.route("/case/reset", methods=["POST"])
 def reset_case() -> str:
     session_id, state = load_state()
