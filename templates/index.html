@@ -47,7 +47,7 @@
     <section class="panel panel--controls">
         <div class="panel__header">
             <h2>Управление делом</h2>
-            <p>Выберите готовый кейс или соберите новое процедурное расследование по теме и seed.</p>
+            <p>Выберите готовый кейс, используйте пресет темы или соберите полностью кастомное расследование.</p>
         </div>
         <form action="{{ url_for('select_case') }}" method="post" class="controls-form">
             <label>
@@ -139,8 +139,143 @@
                 Практический режим для занятий: используйте встроенные дела для стабильного демо, а генератор — чтобы быстро получать новые кейсы
                 с разными персонажами и потом воспроизводить их по тому же seed.
             </p>
+
+            <div class="advanced-editor-card">
+                <div>
+                    <h3>Advanced-редактор дел</h3>
+                    <p class="muted">
+                        Отдельный режим для своих миров: тема, локации, роли подозреваемых, улики и предмет конфликта.
+                    </p>
+                </div>
+                <button class="button button--primary" type="button" data-modal-open="custom-case-modal">
+                    Открыть advanced-редактор
+                </button>
+            </div>
         </div>
     </section>
+
+    <div class="modal-overlay" id="custom-case-modal" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-case-modal-title">
+            <button class="modal-close" type="button" data-modal-close aria-label="Закрыть advanced-редактор">×</button>
+
+            <div class="modal-header">
+                <p class="eyebrow">Advanced case editor</p>
+                <h2 id="custom-case-modal-title">Собрать свою тему без готового пресета</h2>
+                <p>
+                    Заполните только то, что важно. Пустые поля получат безопасные значения по умолчанию,
+                    а одинаковые параметры с одинаковым seed дадут одно и то же дело.
+                </p>
+            </div>
+
+            <form action="{{ url_for('generate_custom_case') }}" method="post" class="custom-generator-form">
+                <div class="custom-generator-grid">
+                    <label>
+                        <span>Название темы</span>
+                        <input type="text" name="theme_label" placeholder="Например: Киберпанк-ярмарка, школа магии, космическая станция">
+                    </label>
+
+                    <label>
+                        <span>Название дела</span>
+                        <input type="text" name="case_title" placeholder="Например: Последний сигнал станции «Аврора»">
+                    </label>
+
+                    <label>
+                        <span>Объект / место</span>
+                        <input type="text" name="venue_name" placeholder="Станция «Аврора», лицей «Север», цирк «Мира»">
+                    </label>
+
+                    <label>
+                        <span>Город или локация</span>
+                        <input type="text" name="location" placeholder="Орбита Европы, старый район Казани, подземный город">
+                    </label>
+
+                    <label>
+                        <span>Событие</span>
+                        <input type="text" name="event_name" placeholder="ночным запуском прототипа, выпускным балом, закрытым турниром">
+                    </label>
+
+                    <label>
+                        <span>Роль жертвы</span>
+                        <input type="text" name="victim_role" placeholder="директор станции, куратор курса, главный иллюзионист">
+                    </label>
+
+                    <label>
+                        <span>Закрытая зона</span>
+                        <input type="text" name="restricted_area" placeholder="ядро реактора, архив заклинаний, служебный купол">
+                    </label>
+
+                    <label>
+                        <span>Открытая зона</span>
+                        <input type="text" name="public_area" placeholder="главный атриум, школьный двор, зрительный зал">
+                    </label>
+
+                    <label>
+                        <span>Боковая зона</span>
+                        <input type="text" name="side_area" placeholder="серверная ниша, гримёрный коридор, склад реквизита">
+                    </label>
+
+                    <label>
+                        <span>Ключевой документ</span>
+                        <input type="text" name="document_name" placeholder="протокол запуска, ведомость оценок, контракт на выступление">
+                    </label>
+
+                    <label>
+                        <span>След / вещество</span>
+                        <input type="text" name="trace_material" placeholder="лунная пыль, фиолетовый мел, золотая стружка">
+                    </label>
+
+                    <label>
+                        <span>Предмет конфликта</span>
+                        <input type="text" name="crime_object" placeholder="экспериментальный модуль, зачарованный кубок, редкий артефакт">
+                    </label>
+
+                    <label>
+                        <span>Seed</span>
+                        <input type="text" name="custom_case_seed" placeholder="Оставьте пустым для случайного">
+                    </label>
+
+                    <label>
+                        <span>Уровень сложности</span>
+                        <select name="difficulty">
+                            {% for option in difficulty_options %}
+                                <option value="{{ option.key }}" {% if option.key == difficulty.key %}selected{% endif %}>
+                                    {{ option.label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Модель Ollama</span>
+                        <input type="text" name="model_name" value="{{ state.model_name }}" placeholder="llama3.1:8b">
+                    </label>
+
+                    <label class="custom-generator__wide">
+                        <span>Роли подозреваемых</span>
+                        <textarea
+                            name="suspect_roles"
+                            rows="4"
+                            placeholder="Одна роль на строку: пилот шаттла, хранитель архива, инвестор, техник реактора, ведущая церемонии"
+                        ></textarea>
+                    </label>
+
+                    <label class="custom-generator__wide">
+                        <span>Короткое настроение темы</span>
+                        <textarea
+                            name="pitch"
+                            rows="3"
+                            placeholder="Например: тревожный неон, секреты корпораций и ощущение, что станция скрывает больше, чем люди"
+                        ></textarea>
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="button button--ghost" type="button" data-modal-close>Отмена</button>
+                    <button class="button button--primary" type="submit">Сгенерировать кастомное дело</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div class="board-grid">
         <section class="panel panel--overview">
@@ -481,4 +616,54 @@
         </section>
     </div>
 </div>
+
+<script>
+    (() => {
+        const openButtons = document.querySelectorAll("[data-modal-open]");
+        const closeButtons = document.querySelectorAll("[data-modal-close]");
+
+        const openModal = (id) => {
+            const modal = document.getElementById(id);
+            if (!modal) {
+                return;
+            }
+            modal.classList.add("modal-overlay--open");
+            modal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
+            const firstInput = modal.querySelector(".custom-generator-form input, .custom-generator-form textarea, .custom-generator-form select");
+            if (firstInput) {
+                firstInput.focus();
+            }
+        };
+
+        const closeModal = (modal) => {
+            if (!modal) {
+                return;
+            }
+            modal.classList.remove("modal-overlay--open");
+            modal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+        };
+
+        openButtons.forEach((button) => {
+            button.addEventListener("click", () => openModal(button.dataset.modalOpen));
+        });
+
+        closeButtons.forEach((button) => {
+            button.addEventListener("click", () => closeModal(button.closest(".modal-overlay")));
+        });
+
+        document.addEventListener("click", (event) => {
+            if (event.target.classList.contains("modal-overlay")) {
+                closeModal(event.target);
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                closeModal(document.querySelector(".modal-overlay--open"));
+            }
+        });
+    })();
+</script>
 {% endblock %}

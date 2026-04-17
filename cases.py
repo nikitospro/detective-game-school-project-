@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from dataclasses import dataclass
 from random import Random
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -452,7 +456,7 @@ PROCEDURAL_THEMES = {
 
 
 def _slug(text: str) -> str:
-    return (
+    cleaned = (
         text.lower()
         .replace(" ", "_")
         .replace("-", "_")
@@ -460,6 +464,8 @@ def _slug(text: str) -> str:
         .replace("»", "")
         .replace("'", "")
     )
+    cleaned = re.sub(r"[^a-zа-яё0-9_]+", "", cleaned)
+    return cleaned.strip("_") or "custom"
 
 
 def make_generated_case_id(theme_key: str, seed: int) -> str:
@@ -474,6 +480,96 @@ def parse_generated_case_id(case_id: str) -> tuple[str, int] | None:
         return None
     try:
         return theme_key, int(seed_text)
+    except ValueError:
+        return None
+
+
+def _safe_custom_text(value: Any, fallback: str, *, max_length: int = 90) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        cleaned = fallback
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned[:max_length].strip() or fallback
+
+
+def _split_custom_list(
+    value: Any,
+    fallback: list[str],
+    *,
+    minimum: int = 4,
+    maximum: int = 5,
+) -> list[str]:
+    if isinstance(value, list):
+        raw_items = [str(item) for item in value]
+    else:
+        raw_items = re.split(r"[\n,;]+", str(value or ""))
+    items = []
+    for item in raw_items:
+        cleaned = _safe_custom_text(item, "", max_length=60)
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+
+    for item in fallback:
+        if len(items) >= minimum:
+            break
+        if item not in items:
+            items.append(item)
+
+    return items[:maximum]
+
+
+def normalize_custom_theme_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    raw = payload or {}
+    venue_name = _safe_custom_text(raw.get("venue_name"), "Неоновый перекрёсток")
+    theme_label = _safe_custom_text(raw.get("theme_label"), "Кастомная тема")
+    case_title = _safe_custom_text(raw.get("case_title"), "", max_length=110)
+    default_roles = [
+        "Хозяин площадки",
+        "Специалист по безопасности",
+        "Финансовый посредник",
+        "Технический эксперт",
+        "Публичный куратор",
+    ]
+    suspect_roles = _split_custom_list(raw.get("suspect_roles"), default_roles)
+
+    return {
+        "theme_label": theme_label,
+        "pitch": _safe_custom_text(
+            raw.get("pitch"),
+            f"Авторская тема вокруг объекта «{venue_name}», где каждый участник скрывает личный интерес.",
+            max_length=180,
+        ),
+        "case_title": case_title,
+        "venue_name": venue_name,
+        "location": _safe_custom_text(raw.get("location"), "Авторская локация"),
+        "event_name": _safe_custom_text(raw.get("event_name"), "закрытым вечерним событием"),
+        "victim_role": _safe_custom_text(raw.get("victim_role"), "организатор события"),
+        "restricted_area": _safe_custom_text(raw.get("restricted_area"), "закрытый служебный сектор"),
+        "public_area": _safe_custom_text(raw.get("public_area"), "главная открытая зона"),
+        "side_area": _safe_custom_text(raw.get("side_area"), "боковая техническая зона"),
+        "document_name": _safe_custom_text(raw.get("document_name"), "спорный внутренний отчёт"),
+        "trace_material": _safe_custom_text(raw.get("trace_material"), "редкая пыль с места"),
+        "crime_object": _safe_custom_text(raw.get("crime_object"), "ценный предмет конфликта"),
+        "suspect_roles": suspect_roles,
+    }
+
+
+def _custom_theme_fingerprint(payload: dict[str, Any]) -> str:
+    normalized = normalize_custom_theme_payload(payload)
+    packed = json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(packed.encode("utf-8")).hexdigest()[:12]
+
+
+def make_custom_case_id(payload: dict[str, Any], seed: int) -> str:
+    return f"custom::{seed}::{_custom_theme_fingerprint(payload)}"
+
+
+def parse_custom_case_id(case_id: str) -> tuple[int, str] | None:
+    if not case_id.startswith("custom::"):
+        return None
+    try:
+        _, seed_text, fingerprint = case_id.split("::", 2)
+        return int(seed_text), fingerprint
     except ValueError:
         return None
 
@@ -493,7 +589,6 @@ def _clamp(value: int, lower: int, upper: int) -> int:
 def _build_generated_suspects(
     *,
     rng: Random,
-    theme: ProceduralTheme,
     victim_name: str,
     document_name: str,
     crime_object: str,
@@ -506,11 +601,12 @@ def _build_generated_suspects(
     red_herring_index: int,
     time_service: str,
     time_photo: str,
+    role_profiles: list[RoleProfile],
 ) -> list[Suspect]:
     suspects: list[Suspect] = []
     victim_first = victim_name.split()[0]
 
-    for index, profile in enumerate(ROLE_PROFILES):
+    for index, profile in enumerate(role_profiles):
         trait_set = rng.choice(profile.trait_sets)
         stress = 44 + index * 4
         if index == culprit_index:
@@ -573,8 +669,14 @@ def _build_generated_case(
     seed: int,
     title_override: str | None = None,
     origin: str = "generated",
+    theme_override: ProceduralTheme | None = None,
+    role_profiles: list[RoleProfile] | None = None,
+    case_id_override: str | None = None,
+    difficulty_label: str = "Процедурное",
+    summary_hint_override: str | None = None,
 ) -> CaseFile:
-    theme = PROCEDURAL_THEMES[theme_key]
+    theme = theme_override or PROCEDURAL_THEMES[theme_key]
+    profiles = role_profiles or ROLE_PROFILES
     rng = Random(f"{theme_key}:{seed}")
     venue_name = rng.choice(theme.venue_names)
     event_name = rng.choice(theme.events)
@@ -587,10 +689,10 @@ def _build_generated_case(
     crime_object = rng.choice(theme.crime_objects)
     city = rng.choice(theme.locations)
     victim_name = _pick_names(rng, 1)[0]
-    culprit_index = rng.randrange(len(ROLE_PROFILES))
-    red_herring_index = rng.choice([index for index in range(len(ROLE_PROFILES)) if index != culprit_index])
+    culprit_index = rng.randrange(len(profiles))
+    red_herring_index = rng.choice([index for index in range(len(profiles)) if index != culprit_index])
     support_index = rng.choice(
-        [index for index in range(len(ROLE_PROFILES)) if index not in {culprit_index, red_herring_index}]
+        [index for index in range(len(profiles)) if index not in {culprit_index, red_herring_index}]
     )
     times = {
         "event": "19:10",
@@ -600,10 +702,9 @@ def _build_generated_case(
         "photo": "21:16",
         "discovery": "21:28",
     }
-    culprit_name_list = _pick_names(rng, len(ROLE_PROFILES))
+    culprit_name_list = _pick_names(rng, len(profiles))
     suspects = _build_generated_suspects(
         rng=rng,
-        theme=theme,
         victim_name=victim_name,
         document_name=document_name,
         crime_object=crime_object,
@@ -616,6 +717,7 @@ def _build_generated_case(
         red_herring_index=red_herring_index,
         time_service=times["service"],
         time_photo=times["photo"],
+        role_profiles=profiles,
     )
     culprit = suspects[culprit_index]
     red_herring = suspects[red_herring_index]
@@ -625,7 +727,7 @@ def _build_generated_case(
     support_first = support.name.split()[0]
     victim_first = victim_name.split()[0]
     title = title_override or rng.choice(theme.title_templates).format(venue_name=venue_name)
-    case_id = make_generated_case_id(theme_key, seed)
+    case_id = case_id_override or make_generated_case_id(theme_key, seed)
 
     introduction = (
         f"После {event_name} {victim_role} {victim_name} найден(а) без сознания у зоны «{restricted_area}». "
@@ -666,7 +768,8 @@ def _build_generated_case(
             title="Ручной разрыв видеозаписи",
             description=(
                 f"Запись с камеры у {restricted_area} обрывается ровно на две минуты, а в журнале стоит ручной "
-                f"сервисный запрос с поста, к которому имели доступ {culprit_first} и начальник охраны."
+                f"сервисный запрос с поста, к которому имели доступ {culprit_first} и фигурант с ролью "
+                f"«{suspects[1].role}»."
             ),
             found_at="Архив локальной системы наблюдения",
             interpretation=(
@@ -860,8 +963,8 @@ def _build_generated_case(
         location=location,
         timeline=timeline,
         victim_name=victim_name,
-        difficulty_label="Процедурное",
-        summary_hint=(
+        difficulty_label=difficulty_label,
+        summary_hint=summary_hint_override or (
             "В процедурных делах особенно полезно сверять алиби с маршрутами и искать одну улику, "
             "которая одновременно даёт мотив и физическую привязку."
         ),
@@ -878,6 +981,93 @@ def _build_generated_case(
 
 def build_generated_case(theme_key: str, seed: int) -> CaseFile:
     return _build_generated_case(theme_key=theme_key, seed=seed, origin="generated")
+
+
+def _build_custom_role_profiles(role_names: list[str]) -> list[RoleProfile]:
+    profiles: list[RoleProfile] = []
+    for index, role_name in enumerate(role_names):
+        base = ROLE_PROFILES[index % len(ROLE_PROFILES)]
+        role_key = f"custom_{index}_{_slug(role_name)}"
+        profiles.append(
+            RoleProfile(
+                key=role_key,
+                role=role_name,
+                backstory_templates=[
+                    f"В этой истории роль «{role_name}» даёт доступ к людям, расписанию и скрытым маршрутам.",
+                    f"Работает как «{role_name}» и знает, какие детали авторской темы лучше не выносить наружу.",
+                ],
+                motive_templates=[
+                    f"Жертва собиралась проверить {{document_name}} и могла раскрыть личную схему, связанную с ролью «{role_name}».",
+                    f"После конфликта вокруг {{crime_object}} боялся(ась), что жертва публично разрушит его(её) положение.",
+                ],
+                alibi_templates=[
+                    "Утверждает, что с {time_service} до {time_photo} держался(ась) у {public_area}, потому что там все могли его(её) видеть.",
+                    "Говорит, что в критический промежуток был(а) между {public_area} и {side_area}, решая проблему события.",
+                ],
+                secret_templates=[
+                    f"Скрывал(а) частную договорённость, которую роль «{role_name}» позволяла провести без лишних свидетелей.",
+                    "Без записи заходил(а) в {restricted_area}, хотя теперь называет это обычной рабочей проверкой.",
+                ],
+                fact_templates=[
+                    f"Именно роль «{role_name}» объясняет, почему этот человек знал внутренние маршруты объекта.",
+                    "Его(её) имя встречается в рабочей переписке рядом с темой {document_name}.",
+                ],
+                relationship_templates=[
+                    f"С жертвой был напряжённый рабочий контакт: роль «{role_name}» давала влияние, но не защищала от проверки.",
+                    "Жертва считала этого человека полезным, пока не начала перепроверять его(её) решения лично.",
+                ],
+                speaking_styles=base.speaking_styles,
+                strategy_templates=[
+                    "Держаться за свою роль и объяснять несостыковки хаосом авторской темы.",
+                    "Признавать мелкие нарушения, но не подпускать следователя к мотиву и закрытой зоне.",
+                ],
+                pressure_points=list(dict.fromkeys(base.pressure_points + [_slug(role_name)]))[:4],
+                trait_sets=base.trait_sets,
+            )
+        )
+    return profiles
+
+
+def build_custom_case(payload: dict[str, Any], seed: int) -> CaseFile:
+    normalized = normalize_custom_theme_payload(payload)
+    case_id = make_custom_case_id(normalized, seed)
+    theme_key = f"custom_{_custom_theme_fingerprint(normalized)}"
+    venue_name = normalized["venue_name"]
+    case_title = normalized["case_title"]
+    theme = ProceduralTheme(
+        key=theme_key,
+        label=normalized["theme_label"],
+        pitch=normalized["pitch"],
+        title_templates=[
+            case_title or f"Тайна объекта «{venue_name}»",
+            case_title or f"Последняя ночь в «{venue_name}»",
+            case_title or f"Следы внутри «{venue_name}»",
+        ],
+        venue_names=[venue_name],
+        locations=[normalized["location"]],
+        events=[normalized["event_name"]],
+        victim_roles=[normalized["victim_role"]],
+        restricted_areas=[normalized["restricted_area"]],
+        public_areas=[normalized["public_area"]],
+        side_areas=[normalized["side_area"]],
+        documents=[normalized["document_name"]],
+        traces=[normalized["trace_material"]],
+        crime_objects=[normalized["crime_object"]],
+    )
+    return _build_generated_case(
+        theme_key=theme.key,
+        seed=seed,
+        title_override=case_title or None,
+        origin="generated",
+        theme_override=theme,
+        role_profiles=_build_custom_role_profiles(normalized["suspect_roles"]),
+        case_id_override=case_id,
+        difficulty_label="Кастомное дело",
+        summary_hint_override=(
+            "В кастомных делах особенно внимательно смотрите на пользовательские детали темы: "
+            "они превращаются в маршруты, мотивы и ключевые улики."
+        ),
+    )
 
 
 def get_generation_themes() -> list[ProceduralTheme]:

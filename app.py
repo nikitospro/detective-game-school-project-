@@ -12,6 +12,22 @@ from utils import JsonSessionStore, ensure_session_id, safe_text
 BASE_DIR = Path(__file__).resolve().parent
 STORE = JsonSessionStore(BASE_DIR / "data" / "sessions")
 ENGINE = GameEngine()
+CUSTOM_THEME_FIELDS = [
+    "theme_label",
+    "pitch",
+    "case_title",
+    "venue_name",
+    "location",
+    "event_name",
+    "victim_role",
+    "restricted_area",
+    "public_area",
+    "side_area",
+    "document_name",
+    "trace_material",
+    "crime_object",
+    "suspect_roles",
+]
 
 
 app = Flask(__name__)
@@ -85,6 +101,32 @@ def generate_case() -> str:
         flash(error, "error")
     else:
         flash("Процедурное дело сгенерировано. Можно начинать новое расследование.", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/case/generate/custom", methods=["POST"])
+def generate_custom_case() -> str:
+    session_id, state = load_state()
+    custom_payload = {
+        field: request.form.get(field, "")
+        for field in CUSTOM_THEME_FIELDS
+    }
+    seed_text = request.form.get("custom_case_seed", "")
+    difficulty = safe_text(request.form.get("difficulty"), state.get("difficulty", "detective"))
+    model_name = safe_text(request.form.get("model_name"), state.get("model_name"))
+
+    updated_state, error = ENGINE.start_custom_case(
+        state,
+        custom_payload=custom_payload,
+        seed_text=seed_text,
+        difficulty=difficulty,
+        model_name=model_name,
+    )
+    save_state(session_id, updated_state)
+    if error:
+        flash(error, "error")
+    else:
+        flash("Кастомное дело собрано из ваших параметров. Расследование началось.", "success")
     return redirect(url_for("index"))
 
 

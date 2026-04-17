@@ -16,6 +16,7 @@ That makes the project a good classroom demo:
 - let the player choose a case;
 - include several built-in local cases for stable demos;
 - generate new deterministic cases from a theme and seed;
+- build fully custom cases from your own setting, locations, clues, conflict object, and suspect roles;
 - show suspects and basic case information;
 - run suspect interrogations in chat format;
 - analyze clues with AI-generated explanations;
@@ -100,10 +101,11 @@ It defines data classes such as:
 
 It also stores the actual cases used in the game.
 
-There are two layers here:
+There are three layers here:
 
 - hand-crafted local cases that are great for reliable demos;
 - procedural cases built from fixed templates, a theme, and a numeric seed.
+- custom procedural cases built from user-provided world details and suspect roles.
 
 That means if you want to create a new story, this is the main place where you would add:
 
@@ -318,14 +320,15 @@ http://127.0.0.1:5000
 ## How to play
 
 1. Choose a case.
-2. Or generate a new case by choosing a theme and optional seed.
-3. Pick a difficulty level.
-4. Open suspects and question them.
-5. Study clues and compare them with testimonies.
-6. Write your own notes.
-7. Look for contradictions.
-8. Make a final accusation.
-9. Read the final evaluation and report.
+2. Or generate a new case by choosing a preset theme and optional seed.
+3. Or open the custom generator and describe your own setting, zones, clues, conflict object, and suspect roles.
+4. Pick a difficulty level.
+5. Open suspects and question them.
+6. Study clues and compare them with testimonies.
+7. Write your own notes.
+8. Look for contradictions.
+9. Make a final accusation.
+10. Read the final evaluation and report.
 
 ## Difficulty levels
 
@@ -389,10 +392,11 @@ If you want to show this project in class, a nice flow is:
 
 1. open one built-in case and explain the story;
 2. generate a second case live from a theme and seed;
-3. question one suspect;
-4. open one clue and show the AI explanation;
-5. point out that the truth still comes from deterministic case logic, not the model;
-6. make a final accusation and compare the result with the real solution.
+3. generate a third case from a custom student-suggested setting;
+4. question one suspect;
+5. open one clue and show the AI explanation;
+6. point out that the truth still comes from deterministic case logic, not the model;
+7. make a final accusation and compare the result with the real solution.
 
 ## Final note
 

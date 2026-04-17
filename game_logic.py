@@ -10,11 +10,15 @@ from cases import (
     Clue,
     Contradiction,
     Suspect,
+    build_custom_case,
     build_generated_case,
     get_case_map,
     get_default_case_id,
     get_generation_themes,
+    make_custom_case_id,
     make_generated_case_id,
+    normalize_custom_theme_payload,
+    parse_custom_case_id,
     parse_generated_case_id,
 )
 from ollama_client import OllamaClient
@@ -68,6 +72,8 @@ DIFFICULTIES: dict[str, DifficultyProfile] = {
     ),
 }
 
+CUSTOM_CASES_KEY = "custom_case_blueprints"
+
 
 class GameEngine:
     def __init__(
@@ -85,6 +91,7 @@ class GameEngine:
         if not state:
             return self.new_state()
 
+        self._register_custom_cases_from_state(state)
         case_file = self._resolve_case(state.get("case_id"))
         if case_file is None:
             return self.new_state()
@@ -94,6 +101,7 @@ class GameEngine:
         state.setdefault("notes", "")
         state.setdefault("viewed_clues", [])
         state.setdefault("clue_analysis", {})
+        state.setdefault(CUSTOM_CASES_KEY, {})
         state.setdefault("summary", {"text": "", "source": "system", "error": None})
         state.setdefault("result", None)
         state.setdefault("last_llm", {"source": "system", "error": None})
@@ -195,11 +203,14 @@ class GameEngine:
         difficulty: str | None = None,
         model_name: str | None = None,
     ) -> dict[str, Any]:
-        return self.new_state(
+        updated = self.new_state(
             case_id=case_id,
             difficulty=difficulty or state.get("difficulty", "detective"),
             model_name=model_name or state.get("model_name"),
         )
+        updated[CUSTOM_CASES_KEY] = deepcopy(state.get(CUSTOM_CASES_KEY, {}))
+        self._register_custom_cases_from_state(updated)
+        return updated
 
     def update_settings(
         self,
@@ -246,19 +257,61 @@ class GameEngine:
         if seed == 0:
             seed = 1
 
-        return (
-            self.new_state(
-                case_id=make_generated_case_id(cleaned_theme, seed),
-                difficulty=difficulty or state.get("difficulty", "detective"),
-                model_name=model_name or state.get("model_name"),
-            ),
-            None,
+        updated = self.new_state(
+            case_id=make_generated_case_id(cleaned_theme, seed),
+            difficulty=difficulty or state.get("difficulty", "detective"),
+            model_name=model_name or state.get("model_name"),
         )
+        updated[CUSTOM_CASES_KEY] = deepcopy(state.get(CUSTOM_CASES_KEY, {}))
+        return updated, None
+
+    def start_custom_case(
+        self,
+        state: dict[str, Any],
+        *,
+        custom_payload: dict[str, Any],
+        seed_text: str,
+        difficulty: str | None = None,
+        model_name: str | None = None,
+    ) -> tuple[dict[str, Any], str | None]:
+        if safe_text(seed_text):
+            try:
+                seed = abs(int(seed_text))
+            except ValueError:
+                return deepcopy(self.ensure_state(state)), "Seed должен быть целым числом."
+        else:
+            seed = stable_seed(
+                custom_payload,
+                datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+            )
+
+        if seed == 0:
+            seed = 1
+
+        normalized_payload = normalize_custom_theme_payload(custom_payload)
+        case_id = make_custom_case_id(normalized_payload, seed)
+        self.generated_case_cache[case_id] = build_custom_case(normalized_payload, seed)
+
+        updated = self.new_state(
+            case_id=case_id,
+            difficulty=difficulty or state.get("difficulty", "detective"),
+            model_name=model_name or state.get("model_name"),
+        )
+        custom_cases = deepcopy(state.get(CUSTOM_CASES_KEY, {}))
+        custom_cases[case_id] = normalized_payload
+        updated[CUSTOM_CASES_KEY] = dict(list(custom_cases.items())[-8:])
+        return updated, None
 
     def get_case_options(self, state: dict[str, Any]) -> list[CaseFile]:
         options = list(self.case_map.values())
+        self._register_custom_cases_from_state(state)
+        for case_id in state.get(CUSTOM_CASES_KEY, {}):
+            custom_case = self._resolve_case(case_id)
+            if custom_case and custom_case.case_id not in {case.case_id for case in options}:
+                options.append(custom_case)
+
         current_case = self._resolve_case(state.get("case_id"))
-        if current_case and current_case.case_id not in self.case_map:
+        if current_case and current_case.case_id not in {case.case_id for case in options}:
             options.append(current_case)
         return options
 
@@ -581,6 +634,7 @@ class GameEngine:
             "difficulty_options": list(DIFFICULTIES.values()),
             "state": current_state,
             "is_generated_case": case_file.origin == "generated",
+            "is_custom_case": parse_custom_case_id(case_file.case_id) is not None,
             "active_suspect": active_suspect,
             "active_history": current_state["chat_history"][active_suspect.suspect_id],
             "active_clue": active_clue,
@@ -612,14 +666,25 @@ class GameEngine:
             return self.case_map[cleaned_case_id]
 
         parsed = parse_generated_case_id(cleaned_case_id)
-        if parsed is None:
-            return None
+        if parsed is not None:
+            theme_key, seed = parsed
+            generated_case_id = make_generated_case_id(theme_key, seed)
+            if generated_case_id not in self.generated_case_cache:
+                self.generated_case_cache[generated_case_id] = build_generated_case(theme_key, seed)
+            return self.generated_case_cache[generated_case_id]
 
-        theme_key, seed = parsed
-        generated_case_id = make_generated_case_id(theme_key, seed)
-        if generated_case_id not in self.generated_case_cache:
-            self.generated_case_cache[generated_case_id] = build_generated_case(theme_key, seed)
-        return self.generated_case_cache[generated_case_id]
+        if parse_custom_case_id(cleaned_case_id) is not None:
+            return self.generated_case_cache.get(cleaned_case_id)
+
+        return None
+
+    def _register_custom_cases_from_state(self, state: dict[str, Any]) -> None:
+        for case_id, payload in state.get(CUSTOM_CASES_KEY, {}).items():
+            parsed = parse_custom_case_id(case_id)
+            if parsed is None or case_id in self.generated_case_cache:
+                continue
+            seed, _ = parsed
+            self.generated_case_cache[case_id] = build_custom_case(payload, seed)
 
     @staticmethod
     def _opening_line(suspect: Suspect) -> str:

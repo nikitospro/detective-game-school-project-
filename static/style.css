@@ -35,6 +35,10 @@ body {
     min-height: 100vh;
 }
 
+body.modal-open {
+    overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -241,6 +245,124 @@ textarea {
 .control-note {
     margin: 12px 0 0;
     line-height: 1.55;
+}
+
+.advanced-editor-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    margin-top: 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(82, 59, 42, 0.12);
+    background:
+        linear-gradient(135deg, rgba(255, 250, 242, 0.78), rgba(246, 238, 224, 0.72)),
+        radial-gradient(circle at top right, rgba(141, 51, 37, 0.08), transparent 42%);
+    padding: 16px;
+}
+
+.advanced-editor-card h3,
+.advanced-editor-card p {
+    margin: 0;
+}
+
+.advanced-editor-card p {
+    margin-top: 6px;
+    line-height: 1.55;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(22, 16, 12, 0.55);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.24s ease, visibility 0.24s ease;
+}
+
+.modal-overlay--open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.modal-dialog {
+    position: relative;
+    width: min(1120px, 100%);
+    max-height: min(86vh, 980px);
+    overflow-y: auto;
+    border-radius: 28px;
+    border: 1px solid rgba(255, 250, 242, 0.48);
+    background:
+        linear-gradient(135deg, rgba(255, 250, 242, 0.98), rgba(239, 229, 213, 0.96)),
+        radial-gradient(circle at top right, rgba(141, 51, 37, 0.12), transparent 38%);
+    box-shadow: 0 36px 90px rgba(25, 16, 10, 0.34);
+    padding: 26px;
+    transform: translateY(14px) scale(0.98);
+    transition: transform 0.24s ease;
+}
+
+.modal-overlay--open .modal-dialog {
+    transform: translateY(0) scale(1);
+}
+
+.modal-close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(141, 51, 37, 0.1);
+    color: var(--accent-deep);
+    cursor: pointer;
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+.modal-header {
+    max-width: 820px;
+    margin-bottom: 18px;
+}
+
+.modal-header h2,
+.modal-header p {
+    margin: 0;
+}
+
+.modal-header p:not(.eyebrow) {
+    margin-top: 10px;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.custom-generator-form {
+    display: grid;
+    gap: 14px;
+}
+
+.custom-generator-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.custom-generator__wide {
+    grid-column: span 3;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 label {
@@ -666,6 +788,19 @@ textarea:focus {
     .controls-form--generator {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .custom-generator-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .custom-generator__wide {
+        grid-column: span 2;
+    }
+
+    .advanced-editor-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 
 @media (max-width: 900px) {
@@ -677,6 +812,28 @@ textarea:focus {
 
     .case-facts {
         grid-template-columns: 1fr;
+    }
+
+    .custom-generator-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .custom-generator__wide {
+        grid-column: span 1;
+    }
+
+    .modal-overlay {
+        padding: 12px;
+    }
+
+    .modal-dialog {
+        border-radius: 20px;
+        padding: 20px;
+    }
+
+    .modal-close {
+        top: 12px;
+        right: 12px;
     }
 }
 
